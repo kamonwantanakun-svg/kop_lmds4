@@ -1,45 +1,61 @@
-function syncCustomerData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sourceSheet = ss.getSheetByName("SCGนครหลวงJWDภูมิภาค");
-  const targetSheet = ss.getSheetByName("Database");
-  const nameMappingSheet = ss.getSheetByName("NameMapping");
-  
-  const sourceData = sourceSheet.getDataRange().getValues();
-  const nameMapping = nameMappingSheet.getDataRange().getValues();
-  const targetData = targetSheet.getDataRange().getValues();
-  
-  const existingUUIDs = new Set(targetData.map(row => row[0])); // Assuming UUID is in the first column
+function syncNewCustomers() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var dataSheet = ss.getSheetByName('Data');
+    var dbSheet = ss.getSheetByName('Database');
+    var nameMapping = getNameMappings();
+    var postalRefs = getPostalRefs();
 
-  for (let i = 1; i < sourceData.length; i++) {
-    let row = sourceData[i];
-    const uuid = row[0]; // Assuming UUID is in the first column
+    // Get the last row from the database
+    var lastRow = dbSheet.getLastRow();
 
-    // Check for duplicates
-    if (existingUUIDs.has(uuid)) continue;
+    // Get data from Data sheet
+    var dataRange = dataSheet.getDataRange();
+    var dataValues = dataRange.getValues();
 
-    // Name correction using NameMapping
-    const name = row[1]; // Assuming name is in the second column
-    const correctedName = mapName(name, nameMapping);
+    // Iterate through each row in the Data sheet
+    for (var i = 1; i < dataValues.length; i++) { // skip header row
+        var customer = dataValues[i];
+        var name = customer[0]; // assuming name is in the first column
+        var address = customer[1]; // assuming address is in the second column
 
-    // Address enrichment using PostalRef
-    const address = enrichAddress(row[2]); // Assuming address info is in the third column
+        // Correct name using NameMapping
+        if (nameMapping[name]) {
+            name = nameMapping[name];
+        }
 
-    // Prepare the new customer record
-    const newData = [uuid, correctedName, address]; // Adjust according to the target sheet structure
-    targetSheet.appendRow(newData);
-  }
-}
+        // Enrich address using PostalRef
+        if (postalRefs[address]) {
+            address = postalRefs[address];
+        }
 
-function mapName(name, nameMapping) {
-  for (let i = 0; i < nameMapping.length; i++) {
-    if (nameMapping[i][0] === name) { // Assuming mapping is in the first column
-      return nameMapping[i][1]; // Return the corrected name from the second column
+        // Check if customer already exists in Database
+        var exists = false;
+        for (var j = 1; j <= lastRow; j++) {
+            if (dbSheet.getRange(j, 1).getValue() === name) {
+                exists = true;
+                break;
+            }
+        }
+
+        // If customer does not exist, add to Database
+        if (!exists) {
+            dbSheet.appendRow([name, address]);
+        }
     }
-  }
-  return name; // Return original name if no mapping found
 }
 
-function enrichAddress(address) {
-  // Example enrichment logic goes here
-  return address; // Modify as necessary based on PostalRef logic
+function getNameMappings() {
+    return {
+        'John Doe': 'Jonathan Doe',
+        'Jane Smith': 'Janet Smith'
+        // Add more mappings as needed
+    };
+}
+
+function getPostalRefs() {
+    return {
+        '123 Main St': '123 Main Street, Apt 4B',
+        '456 Elm St': '456 Elm Street'
+        // Add more postal references as needed
+    };
 }
